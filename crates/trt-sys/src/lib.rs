@@ -58,3 +58,45 @@ extern "C" {
 /// Installed TensorRT version "MAJOR.MINOR.PATCH.BUILD", parsed from
 /// NvInferVersion.h at build time.  Engine-cache keys depend on this.
 pub const TENSORRT_VERSION: &str = env!("TENSORRT_VERSION");
+
+#[cfg(test)]
+#[path = "../trt_version.rs"]
+mod trt_version_tests_impl;
+
+#[cfg(test)]
+mod tests {
+    use super::trt_version_tests_impl::parse_trt_version_text;
+
+    #[test]
+    fn parses_literal_version_macros() {
+        let header = "\
+#define NV_TENSORRT_MAJOR 10\n\
+#define NV_TENSORRT_MINOR 3\n\
+#define NV_TENSORRT_PATCH 0\n\
+#define NV_TENSORRT_BUILD 30\n";
+        assert_eq!(parse_trt_version_text(header).as_deref(), Some("10.3.0.30"));
+    }
+
+    #[test]
+    fn parses_enterprise_indirection() {
+        let header = "\
+#define TRT_MAJOR_ENTERPRISE 10\n\
+#define TRT_MINOR_ENTERPRISE 13\n\
+#define TRT_PATCH_ENTERPRISE 3\n\
+#define TRT_BUILD_ENTERPRISE 9\n\
+#define NV_TENSORRT_MAJOR TRT_MAJOR_ENTERPRISE //!< comment\n\
+#define NV_TENSORRT_MINOR TRT_MINOR_ENTERPRISE //!< comment\n\
+#define NV_TENSORRT_PATCH TRT_PATCH_ENTERPRISE //!< comment\n\
+#define NV_TENSORRT_BUILD TRT_BUILD_ENTERPRISE //!< comment\n";
+        assert_eq!(parse_trt_version_text(header).as_deref(), Some("10.13.3.9"));
+    }
+
+    #[test]
+    fn rejects_missing_or_cyclic_version_macros() {
+        let header = "\
+#define NV_TENSORRT_MAJOR NV_TENSORRT_MAJOR\n\
+#define NV_TENSORRT_MINOR 13\n\
+#define NV_TENSORRT_PATCH 3\n";
+        assert_eq!(parse_trt_version_text(header), None);
+    }
+}
