@@ -107,9 +107,15 @@ private `sensor-rtsp` dep):
 
 ```bash
 export CARGO_NET_GIT_FETCH_WITH_CLI=true
-cargo run --release --manifest-path examples/rtsp_track/Cargo.toml -- \
+cargo run --release --manifest-path examples/rtsp_track/Cargo.toml --features rtsp -- \
     <rfdetr-seg.engine> <depth-anything.engine> rtsp://user:pass@camera/stream1 0.4 serve
 # open http://<jetson-ip>:8080 (or your phone on the same network) — annotated view + BEV
+```
+
+On DGX Spark, run the file-to-Rerun path in the self-contained pixi environment:
+
+```bash
+pixi run -e spark track -- hub hub <video.mp4> 0.4 out.rrd
 ```
 
 The 5th arg picks the sink: `serve` / `:PORT` (live stream), `out.png` (one frame),
