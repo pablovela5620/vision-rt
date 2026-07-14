@@ -19,3 +19,5 @@ models/
 
 # nested / workspace-excluded example crates build into their own target/
 **/target/
+.pixi/
+.pixi-trt/

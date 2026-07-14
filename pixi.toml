@@ -1,0 +1,98 @@
+# Self-contained pixi toolchain for building + running vision-rt on DGX Spark
+# (GB10 / sm_121, CUDA 13, aarch64 SBSA). Mirrors the examples-monorepo `cuda`
+# feature: granular conda CUDA-13 packages, TensorRT runtime from the NVIDIA
+# pip index, and TensorRT C++ headers from a local source package
+# (recipes/tensorrt-dev, built by pixi-build-rattler-build). Engines build
+# in-process via the `builder` feature — no trtexec needed.
+#
+#   pixi run -e spark build         # cargo build --release (workspace)
+#   pixi run -e spark track -- ...  # flagship file example
+#
+# Jetson is unaffected: without pixi, trt-sys falls back to its JetPack
+# system-path defaults.
+
+[workspace]
+name = "vision-rt"
+version = "0.1.0"
+channels = ["conda-forge"]
+platforms = ["linux-aarch64"]
+requires-pixi = ">=0.72"
+preview = ["pixi-build"]
+
+[feature.spark]
+platforms = ["linux-aarch64"]
+
+[feature.spark.system-requirements]
+cuda = "13.0"
+# CUDA-13 aarch64 wheels (tensorrt-cu13-libs) are manylinux_2_35; Spark's
+# Ubuntu 24.04 has glibc 2.39.
+libc = { family = "glibc", version = "2.35" }
+
+[feature.spark.dependencies]
+# Rust toolchain (matches rust-toolchain.toml) + native build tools.
+rust = "1.93.*"
+c-compiler = "*"
+cxx-compiler = "*"
+clang = "*"    # libclang for bindgen (trt-sys)
+cmake = "*"
+pkg-config = "*"
+git = "*"
+zlib = "*"       # gio-2.0.pc requires zlib.pc when linking the tracking example
+# CUDA 13 build tools (nvcc for cudarc version detection, nvrtc for JIT
+# kernels, cudart headers/libs for the trt-sys shim).
+cuda-version = "13.0.*"
+cuda-nvcc = "*"
+cuda-cudart-dev = "*"
+cuda-nvrtc-dev = "*"
+cuda-driver-dev = "*"
+# TensorRT C++ headers — local source package, version-locked to the wheel.
+tensorrt-dev = { path = "recipes/tensorrt-dev" }
+# Python hosts the TensorRT wheel.
+python = "3.12.*"
+# Video decode for the file source (ffmpeg CLI) + gstreamer for vrt-viz `h264`
+# live streaming (x264enc lives in gst-plugins-ugly).
+ffmpeg = "*"
+gstreamer = "*"
+gst-plugins-base = "*"
+gst-plugins-good = "*"
+gst-plugins-ugly = "*"
+gst-libav = "*"  # avdec_h264 — decodebin's H.264 decoder for the file source
+rerun-sdk = "0.34.*" # version-matched viewer binary used by RecordingStreamBuilder::spawn
+
+[feature.spark.pypi-dependencies]
+# TensorRT runtime libs (libnvinfer/plugin/nvonnxparser, all *.so.10) — same
+# source + version as the examples-monorepo cuda feature (native sm_121 SASS,
+# proven on this Spark). tensorrt-cu13-libs has stale metadata requiring
+# `nvidia-cuda-runtime-cu13`; conda provides the real CUDA 13 runtime, so
+# NVIDIA's empty 0.0.0a0 placeholder satisfies it (no-op).
+tensorrt-cu13 = { version = "==10.13.3.9", index = "https://pypi.nvidia.com" }
+nvidia-cuda-runtime-cu13 = "==0.0.0a0"
+
+[feature.spark.activation.env]
+# trt-sys build.rs discovery: headers from tensorrt-dev, libs from the wheel.
+TRT_INCLUDE_DIR = "$CONDA_PREFIX/include"
+TRT_LIB_DIR = "$CONDA_PREFIX/lib/python3.12/site-packages/tensorrt_libs"
+# conda-forge CUDA layout (headers/libs under targets/sbsa-linux, lib not lib64).
+CUDA_HOME = "$CONDA_PREFIX/targets/sbsa-linux"
+CUDARC_CUDA_VERSION = "13000"
+# $CONDA_PREFIX/lib first (nvrtc, gstreamer), then the TRT wheel libs. Setting
+# this key replaces pixi's default, so $CONDA_PREFIX/lib MUST be explicit.
+LD_LIBRARY_PATH = "$CONDA_PREFIX/lib:$CONDA_PREFIX/lib/python3.12/site-packages/tensorrt_libs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+PKG_CONFIG_PATH = "$CONDA_PREFIX/lib/pkgconfig"
+# Private git dep (sensor-rt), only fetched with `--features rtsp`.
+CARGO_NET_GIT_FETCH_WITH_CLI = "true"
+
+[feature.spark.tasks.build]
+cmd = "cargo build --release"
+
+[feature.spark.tasks.build-track]
+cmd = "cargo build --release --manifest-path examples/rtsp_track/Cargo.toml"
+
+[feature.spark.tasks.track]
+cmd = "cargo run --release --manifest-path examples/rtsp_track/Cargo.toml --bin track_rerun --"
+
+[feature.spark.tasks.check]
+cmd = "cargo clippy --all-targets -- -D warnings"
+
+[environments]
+spark = { features = ["spark"], solve-group = "spark", no-default-feature = true }
