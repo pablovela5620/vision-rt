@@ -6,9 +6,9 @@
 # build in-process via the `builder` feature — no trtexec needed. The GPU
 # arch is never pinned: NVRTC and the engine cache derive it from the device.
 #
-#   pixi install       # everything: rust, CUDA 13, TensorRT (libs + headers)
-#   pixi run build     # cargo build --release (workspace)
-#   pixi run check     # clippy gate
+#   pixi install           # everything: rust, CUDA 13, TensorRT (libs + headers)
+#   pixi run build         # cargo build --release (workspace)
+#   pixi run track -- ...  # flagship file example → Rerun
 #
 # Built binaries are env-bound: they link the wheel's TRT libs, which resolve
 # through this env's LD_LIBRARY_PATH — run them via `pixi run` (or export the
@@ -73,6 +73,7 @@ gst-plugins-base = "*"
 gst-plugins-good = "*"
 gst-plugins-ugly = "*"
 gst-libav = "*"
+rerun-sdk = "0.34.*" # version-matched viewer binary used by RecordingStreamBuilder::spawn
 
 [feature.cuda.pypi-dependencies]
 # TensorRT runtime libs (libnvinfer/plugin/nvonnxparser, all *.so.10) — one
@@ -107,6 +108,12 @@ CUDA_HOME = "$CONDA_PREFIX/targets/x86_64-linux"
 
 [feature.cuda.tasks.build]
 cmd = "cargo build --release"
+
+[feature.cuda.tasks.build-track]
+cmd = "cargo build --release --manifest-path examples/rtsp_track/Cargo.toml"
+
+[feature.cuda.tasks.track]
+cmd = "cargo run --release --manifest-path examples/rtsp_track/Cargo.toml --bin track_rerun --"
 
 [feature.cuda.tasks.check]
 cmd = "cargo clippy --all-targets -- -D warnings"
